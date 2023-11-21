@@ -1,4 +1,5 @@
-﻿using Mono.Cecil;
+﻿using Oxide.Core;
+using Oxide.Core.Database;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -9,17 +10,17 @@ namespace Oxide.Plugins
     class EasyStreet : CovalencePlugin
     {
         private const string LOG_FLAG = "<------------{ EASY STREET }------------>";
-        private List<BasePlayer> _knownPlayers = new List<BasePlayer>();
 
         object OnDefaultItemsReceived(PlayerInventory inventory)
         {
             var player = inventory.baseEntity;
 
-            if (!_knownPlayers.Any(x => x.displayName == player.displayName))
-                _knownPlayers.Add(player);
-            else
+            var hasPlayerBeenWelcomed = HasPlayerBeenWelcomed(player);
+            if (hasPlayerBeenWelcomed)
             {
-                // we've seen this player before
+                Puts(LOG_FLAG);
+                Puts($"Welcome {player.displayName} back to Easy Street.");
+                Puts(LOG_FLAG);
                 return null;
             }
 
@@ -64,7 +65,7 @@ namespace Oxide.Plugins
             AddItemToInventory(player, "pants", 1, player.inventory.containerWear);
             AddItemToInventory(player, "shoes.boots", 1, player.inventory.containerWear);
             AddItemToInventory(player, "mask.bandana", 1, player.inventory.containerWear);
-            
+
             Puts(LOG_FLAG);
             Puts($"{player.displayName} welcomed to Easy Street with a nice starting inventory.");
             Puts(LOG_FLAG);
@@ -77,6 +78,35 @@ namespace Oxide.Plugins
         {
             Puts($"Adding {itemName}");
             player.inventory.GiveItem(ItemManager.CreateByName(itemName, amount), container);
+        }
+
+        bool HasPlayerBeenWelcomed(BasePlayer player)
+        {
+            bool playerhasbeenwelcomed = false;
+            Core.SQLite.Libraries.SQLite sqlLibrary = Interface.Oxide.GetLibrary<Core.SQLite.Libraries.SQLite>();
+
+            var sqlConnection = sqlLibrary.OpenDb("easystreet.db", this, true);
+
+            sqlLibrary.ExecuteNonQuery(Sql.Builder.Append(
+                @"CREATE TABLE IF NOT EXISTS `giftrecipients` (`player`	CHAR ( 100 ), PRIMARY KEY(`player`) ) WITHOUT ROWID;"), sqlConnection);
+
+            sqlLibrary.Query(Sql.Builder.Append(@"SELECT * FROM `giftrecipients` WHERE `player` = @0", player.displayName),
+                sqlConnection, list =>
+                {
+                    if (list.Count == 0)
+                    {
+                        sqlLibrary.Insert(Sql.Builder.Append(@"INSERT INTO `giftrecipients` (`player`) VALUES (@0)", player.displayName), sqlConnection);
+                        playerhasbeenwelcomed = false;
+                    }
+                    else
+                    {
+                        playerhasbeenwelcomed = true;
+                    }
+                });
+
+            sqlLibrary.CloseDb(sqlConnection);
+
+            return playerhasbeenwelcomed;
         }
     }
 }
