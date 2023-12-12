@@ -1,7 +1,7 @@
 ﻿using Oxide.Core;
-using Oxide.Core.Database;
+using Oxide.Core.Configuration;
+using Oxide.Core.Libraries.Covalence;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Oxide.Plugins
 {
@@ -11,8 +11,44 @@ namespace Oxide.Plugins
     {
         private const string LOG_FLAG = "<------------{ EASY STREET }------------>";
 
-        object OnDefaultItemsReceived(PlayerInventory inventory)
+        private StoredData storedData;
+
+        private void Init()
         {
+            Puts("Initializing Easy Street...");
+            storedData = Interface.Oxide.DataFileSystem.ReadObject<StoredData>("easystreet");
+            Puts("Initialized Easy Street...");
+        }
+
+        private bool HasPlayerBeenWelcomed(BasePlayer player)
+        {
+            Puts("Entering HasPlayerBeenWelcomed");
+
+            bool playerhasbeenwelcomed = false;
+            if (storedData.Players.Contains(player.displayName))
+            {
+                Puts($"HasPlayerBeenWelcomed: Player {player.displayName} has already been welcomed.");
+                playerhasbeenwelcomed = true;
+            }
+            else
+            {
+                Puts($"HasPlayerBeenWelcomed: Player {player.displayName} has not yet been welcomed.");
+
+                Puts($"HasPlayerBeenWelcomed: Adding Player {player.displayName} to data file.");
+                storedData.Players.Add(player.displayName);
+                Interface.Oxide.DataFileSystem.WriteObject("easystreet", storedData);
+                Puts($"HasPlayerBeenWelcomed: Added Player {player.displayName} to data file.");
+            }
+
+            Puts("Exiting HasPlayerBeenWelcomed");
+
+            return playerhasbeenwelcomed;
+        }
+
+        private object OnDefaultItemsReceived(PlayerInventory inventory)
+        {
+            Puts("Entering OnDefaultItemsReceived");
+
             var player = inventory.baseEntity;
 
             var hasPlayerBeenWelcomed = HasPlayerBeenWelcomed(player);
@@ -34,7 +70,7 @@ namespace Oxide.Plugins
             Puts($"Cleared {player.displayName}'s starting inventory.");
             Puts(LOG_FLAG);
 
-            // inventory
+            // resources
             foreach (var resource in new[] { "wood", "stones", "metal.fragments" })
             {
                 for (int i = 0; i < 6; i++)
@@ -43,10 +79,9 @@ namespace Oxide.Plugins
                 }
             }
 
+            // main inventory
             AddItemToInventory(player, "ammo.rifle", 128, player.inventory.containerMain);
-            AddItemToInventory(player, "cupboard.tool", 1, player.inventory.containerMain);
             AddItemToInventory(player, "cloth", 50, player.inventory.containerMain);
-            AddItemToInventory(player, "furnace", 1, player.inventory.containerMain);
             AddItemToInventory(player, "lowgradefuel", 20, player.inventory.containerMain);
             AddItemToInventory(player, "pumpkin", 20, player.inventory.containerMain);
 
@@ -55,8 +90,6 @@ namespace Oxide.Plugins
             AddItemToInventory(player, "knife.combat", 1, player.inventory.containerBelt);
             AddItemToInventory(player, "chainsaw", 1, player.inventory.containerBelt);
             AddItemToInventory(player, "jackhammer", 1, player.inventory.containerBelt);
-            AddItemToInventory(player, "hammer", 1, player.inventory.containerBelt);
-            AddItemToInventory(player, "building.planner", 1, player.inventory.containerBelt);
 
             // clothing
             AddItemToInventory(player, "hat.miner", 1, player.inventory.containerWear);
@@ -66,47 +99,29 @@ namespace Oxide.Plugins
             AddItemToInventory(player, "shoes.boots", 1, player.inventory.containerWear);
             AddItemToInventory(player, "mask.bandana", 1, player.inventory.containerWear);
 
+            // final confirmation
             Puts(LOG_FLAG);
             Puts($"{player.displayName} welcomed to Easy Street with a nice starting inventory.");
             Puts(LOG_FLAG);
 
+            Puts("Exiting OnDefaultItemsReceived");
 
             return null;
         }
 
-        void AddItemToInventory(BasePlayer player, string itemName, int amount, ItemContainer container)
+        private void AddItemToInventory(BasePlayer player, string itemName, int amount, ItemContainer container)
         {
             Puts($"Adding {itemName}");
             player.inventory.GiveItem(ItemManager.CreateByName(itemName, amount), container);
         }
+    }
 
-        bool HasPlayerBeenWelcomed(BasePlayer player)
+    public class StoredData
+    {
+        public HashSet<string> Players = new HashSet<string>();
+
+        public StoredData()
         {
-            bool playerhasbeenwelcomed = false;
-            Core.SQLite.Libraries.SQLite sqlLibrary = Interface.Oxide.GetLibrary<Core.SQLite.Libraries.SQLite>();
-
-            var sqlConnection = sqlLibrary.OpenDb("easystreet.db", this, true);
-
-            sqlLibrary.ExecuteNonQuery(Sql.Builder.Append(
-                @"CREATE TABLE IF NOT EXISTS `giftrecipients` (`player`	CHAR ( 100 ), PRIMARY KEY(`player`) ) WITHOUT ROWID;"), sqlConnection);
-
-            sqlLibrary.Query(Sql.Builder.Append(@"SELECT * FROM `giftrecipients` WHERE `player` = @0", player.displayName),
-                sqlConnection, list =>
-                {
-                    if (list.Count == 0)
-                    {
-                        sqlLibrary.Insert(Sql.Builder.Append(@"INSERT INTO `giftrecipients` (`player`) VALUES (@0)", player.displayName), sqlConnection);
-                        playerhasbeenwelcomed = false;
-                    }
-                    else
-                    {
-                        playerhasbeenwelcomed = true;
-                    }
-                });
-
-            sqlLibrary.CloseDb(sqlConnection);
-
-            return playerhasbeenwelcomed;
         }
     }
 }
